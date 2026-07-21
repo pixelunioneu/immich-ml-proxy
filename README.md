@@ -35,7 +35,7 @@ All configuration is via environment variables:
 | `OCR_BACKEND_BASIC_AUTH_PASSWORD` | no | — | HTTP Basic Auth password sent to the OCR backend |
 | `OCR_TASK_KEYS` | no | `ocr` | comma-separated top-level JSON keys routed to the OCR backend |
 | `REQUEST_TIMEOUT` | no | `60s` | per-request upstream timeout |
-| `MAX_BODY_BYTES` | no | `10485760` (10MiB) | cap on buffered request body size |
+| `MAX_BODY_BYTES` | no | `52428800` (50MiB) | cap on buffered request body size |
 | `LOG_LEVEL` | no | `info` | `debug`, `info`, `warn`, or `error` |
 
 Basic Auth credentials are per-backend and optional. When set, the proxy

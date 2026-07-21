@@ -34,8 +34,8 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.RequestTimeout != 60*time.Second {
 		t.Errorf("RequestTimeout = %v, want 60s", cfg.RequestTimeout)
 	}
-	if cfg.MaxBodyBytes != 10*1024*1024 {
-		t.Errorf("MaxBodyBytes = %d, want 10MiB", cfg.MaxBodyBytes)
+	if cfg.MaxBodyBytes != 50*1024*1024 {
+		t.Errorf("MaxBodyBytes = %d, want 50MiB", cfg.MaxBodyBytes)
 	}
 	if _, ok := cfg.OCRTaskKeys["ocr"]; !ok {
 		t.Errorf("OCRTaskKeys = %v, want to contain \"ocr\"", cfg.OCRTaskKeys)

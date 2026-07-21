@@ -33,7 +33,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		ListenAddr:     getEnv("LISTEN_ADDR", ":3003"),
 		RequestTimeout: 60 * time.Second,
-		MaxBodyBytes:   10 * 1024 * 1024,
+		MaxBodyBytes:   50 * 1024 * 1024,
 		LogLevel:       getEnv("LOG_LEVEL", "info"),
 	}
 
