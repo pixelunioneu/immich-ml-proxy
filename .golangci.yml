@@ -1,18 +1,33 @@
-run:
-  timeout: 5m
-
+version: "2"
 linters:
   enable:
-    - govet
-    - staticcheck
-    - errcheck
-    - gosec
-    - unused
-    - ineffassign
     - bodyclose
+    - gosec
     - unconvert
-
-linters-settings:
-  gosec:
-    excludes:
-      - G114 # ReadHeaderTimeout is set explicitly on http.Server; this rule flags http.ListenAndServe use patterns we don't have
+  settings:
+    gosec:
+      excludes:
+        # G114: ReadHeaderTimeout is set explicitly on http.Server; this rule flags
+        # http.ListenAndServe use patterns we don't have.
+        - G114
+        # G704: forward() is a reverse proxy by design - backendURL host is fixed
+        # config, only the client's path/query is joined in.
+        - G704
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

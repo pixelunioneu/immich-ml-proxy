@@ -1,0 +1,71 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: immich-ml-proxy
+  namespace: immich-ml-proxy
+  labels:
+    app.kubernetes.io/name: immich-ml-proxy
+    app.kubernetes.io/component: proxy
+spec:
+  groups:
+    - name: immich-ml-proxy.rules
+      rules:
+        - alert: ImmichMlProxyDown
+          expr: |
+            up{job="immich-ml-proxy"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Immich ML proxy target down ({{ $labels.pod }})"
+            description: "Prometheus has not been able to scrape {{ $labels.pod }} for 5 minutes."
+
+        - alert: ImmichMlProxyHighUpstreamErrorRate
+          expr: |
+            sum(rate(immich_ml_proxy_upstream_errors_total[5m]))
+              /
+            sum(rate(immich_ml_proxy_requests_total[5m]))
+              > 0.10
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "High upstream error rate on immich-ml-proxy"
+            description: "More than 10% of proxied requests have failed to reach their backend over the last 10 minutes (current value: {{ $value | humanizePercentage }})."
+
+        - alert: ImmichMlProxyNoBackendReached
+          expr: |
+            sum(rate(immich_ml_proxy_upstream_errors_total[5m])) by (backend) > 0
+              and
+            sum(rate(immich_ml_proxy_requests_total{}[5m])) by (backend) == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Backend {{ $labels.backend }} unreachable from immich-ml-proxy"
+            description: "immich-ml-proxy has been unable to reach backend {{ $labels.backend }} for 10 minutes."
+
+        - alert: ImmichMlProxyHighRouteFallbackRate
+          expr: |
+            sum(rate(immich_ml_proxy_route_fallback_total[15m]))
+              /
+            sum(rate(immich_ml_proxy_requests_total[15m]))
+              > 0.2
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High routing fallback rate on immich-ml-proxy"
+            description: "More than 20% of requests are falling back to the default backend due to routing ambiguity over the last 15 minutes (current value: {{ $value | humanizePercentage }})."
+
+        - alert: ImmichMlProxyHighRequestLatency
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(immich_ml_proxy_request_duration_seconds_bucket[5m])) by (le, backend)
+            ) > 10
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High p99 latency proxying to {{ $labels.backend }}"
+            description: "p99 request duration for backend {{ $labels.backend }} has been above 10s for 10 minutes (current value: {{ $value }}s)."
