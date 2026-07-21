@@ -11,6 +11,8 @@ func clearEnv(t *testing.T) {
 	for _, k := range []string{
 		"LISTEN_ADDR", "DEFAULT_BACKEND_URL", "OCR_BACKEND_URL",
 		"OCR_TASK_KEYS", "REQUEST_TIMEOUT", "MAX_BODY_BYTES", "LOG_LEVEL",
+		"DEFAULT_BACKEND_BASIC_AUTH_USERNAME", "DEFAULT_BACKEND_BASIC_AUTH_PASSWORD",
+		"OCR_BACKEND_BASIC_AUTH_USERNAME", "OCR_BACKEND_BASIC_AUTH_PASSWORD",
 	} {
 		t.Setenv(k, "")
 		_ = os.Unsetenv(k)
@@ -85,6 +87,64 @@ func TestLoad_CustomOCRTaskKeys(t *testing.T) {
 		if _, ok := cfg.OCRTaskKeys[k]; !ok {
 			t.Errorf("OCRTaskKeys missing %q: %v", k, cfg.OCRTaskKeys)
 		}
+	}
+}
+
+func TestLoad_BasicAuth(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("DEFAULT_BACKEND_URL", "https://gpu.example.com")
+	t.Setenv("OCR_BACKEND_URL", "http://cpu.example.com")
+	t.Setenv("DEFAULT_BACKEND_BASIC_AUTH_USERNAME", "gpu-user")
+	t.Setenv("DEFAULT_BACKEND_BASIC_AUTH_PASSWORD", "gpu-pass")
+	t.Setenv("OCR_BACKEND_BASIC_AUTH_USERNAME", "ocr-user")
+	t.Setenv("OCR_BACKEND_BASIC_AUTH_PASSWORD", "ocr-pass")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.DefaultBackendUsername != "gpu-user" || cfg.DefaultBackendPassword != "gpu-pass" {
+		t.Errorf("default backend auth = %q/%q, want gpu-user/gpu-pass", cfg.DefaultBackendUsername, cfg.DefaultBackendPassword)
+	}
+	if cfg.OCRBackendUsername != "ocr-user" || cfg.OCRBackendPassword != "ocr-pass" {
+		t.Errorf("ocr backend auth = %q/%q, want ocr-user/ocr-pass", cfg.OCRBackendUsername, cfg.OCRBackendPassword)
+	}
+}
+
+func TestLoad_BasicAuth_Unset(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("DEFAULT_BACKEND_URL", "https://gpu.example.com")
+	t.Setenv("OCR_BACKEND_URL", "http://cpu.example.com")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.DefaultBackendUsername != "" || cfg.DefaultBackendPassword != "" {
+		t.Errorf("expected no default backend auth, got %q/%q", cfg.DefaultBackendUsername, cfg.DefaultBackendPassword)
+	}
+	if cfg.OCRBackendUsername != "" || cfg.OCRBackendPassword != "" {
+		t.Errorf("expected no ocr backend auth, got %q/%q", cfg.OCRBackendUsername, cfg.OCRBackendPassword)
+	}
+}
+
+func TestLoad_BasicAuth_OnlyUsername(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("DEFAULT_BACKEND_URL", "https://gpu.example.com")
+	t.Setenv("OCR_BACKEND_URL", "http://cpu.example.com")
+	t.Setenv("DEFAULT_BACKEND_BASIC_AUTH_USERNAME", "gpu-user")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error when DEFAULT_BACKEND_BASIC_AUTH_USERNAME is set without the password")
+	}
+}
+
+func TestLoad_BasicAuth_OnlyPassword(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("DEFAULT_BACKEND_URL", "https://gpu.example.com")
+	t.Setenv("OCR_BACKEND_URL", "http://cpu.example.com")
+	t.Setenv("OCR_BACKEND_BASIC_AUTH_PASSWORD", "ocr-pass")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error when OCR_BACKEND_BASIC_AUTH_PASSWORD is set without the username")
 	}
 }
 

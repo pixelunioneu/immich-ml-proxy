@@ -27,11 +27,20 @@ All configuration is via environment variables:
 |---|---|---|---|
 | `LISTEN_ADDR` | no | `:3003` | address the proxy listens on |
 | `DEFAULT_BACKEND_URL` | yes | — | base URL of the GPU backend, e.g. `https://immich-ml-gpu.example.internal` |
+| `DEFAULT_BACKEND_BASIC_AUTH_USERNAME` | no | — | HTTP Basic Auth username sent to the GPU backend; must be set together with the password below |
+| `DEFAULT_BACKEND_BASIC_AUTH_PASSWORD` | no | — | HTTP Basic Auth password sent to the GPU backend |
 | `OCR_BACKEND_URL` | yes | — | base URL of the OCR/CPU backend, e.g. `http://immich-ml.immich-ml.svc.cluster.local:3003` |
+| `OCR_BACKEND_BASIC_AUTH_USERNAME` | no | — | HTTP Basic Auth username sent to the OCR backend; must be set together with the password below |
+| `OCR_BACKEND_BASIC_AUTH_PASSWORD` | no | — | HTTP Basic Auth password sent to the OCR backend |
 | `OCR_TASK_KEYS` | no | `ocr` | comma-separated top-level JSON keys routed to the OCR backend |
 | `REQUEST_TIMEOUT` | no | `60s` | per-request upstream timeout |
 | `MAX_BODY_BYTES` | no | `10485760` (10MiB) | cap on buffered request body size |
 | `LOG_LEVEL` | no | `info` | `debug`, `info`, `warn`, or `error` |
+
+Basic Auth credentials are per-backend and optional. When set, the proxy
+sends them to that backend on every request, replacing any `Authorization`
+header the original client sent — the two backends' credentials are never
+mixed up, and a client can't smuggle its own credentials past the proxy.
 
 Both backend URLs may use `http://` or `https://` independently — the proxy
 doesn't care which scheme a given backend uses.

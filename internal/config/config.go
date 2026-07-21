@@ -13,13 +13,17 @@ import (
 
 // Config holds the proxy's runtime configuration.
 type Config struct {
-	ListenAddr        string
-	DefaultBackendURL *url.URL
-	OCRBackendURL     *url.URL
-	OCRTaskKeys       map[string]struct{}
-	RequestTimeout    time.Duration
-	MaxBodyBytes      int64
-	LogLevel          string
+	ListenAddr             string
+	DefaultBackendURL      *url.URL
+	DefaultBackendUsername string
+	DefaultBackendPassword string
+	OCRBackendURL          *url.URL
+	OCRBackendUsername     string
+	OCRBackendPassword     string
+	OCRTaskKeys            map[string]struct{}
+	RequestTimeout         time.Duration
+	MaxBodyBytes           int64
+	LogLevel               string
 }
 
 // Load reads configuration from the environment and validates it. It returns
@@ -43,6 +47,13 @@ func Load() (*Config, error) {
 	}
 	cfg.DefaultBackendURL = defaultURL
 
+	defaultUsername, defaultPassword, err := loadBasicAuth("DEFAULT_BACKEND_BASIC_AUTH_USERNAME", "DEFAULT_BACKEND_BASIC_AUTH_PASSWORD")
+	if err != nil {
+		return nil, err
+	}
+	cfg.DefaultBackendUsername = defaultUsername
+	cfg.DefaultBackendPassword = defaultPassword
+
 	ocrBackend := os.Getenv("OCR_BACKEND_URL")
 	if ocrBackend == "" {
 		return nil, fmt.Errorf("OCR_BACKEND_URL is required")
@@ -52,6 +63,13 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("OCR_BACKEND_URL: %w", err)
 	}
 	cfg.OCRBackendURL = ocrURL
+
+	ocrUsername, ocrPassword, err := loadBasicAuth("OCR_BACKEND_BASIC_AUTH_USERNAME", "OCR_BACKEND_BASIC_AUTH_PASSWORD")
+	if err != nil {
+		return nil, err
+	}
+	cfg.OCRBackendUsername = ocrUsername
+	cfg.OCRBackendPassword = ocrPassword
 
 	cfg.OCRTaskKeys = parseTaskKeys(getEnv("OCR_TASK_KEYS", "ocr"))
 	if len(cfg.OCRTaskKeys) == 0 {
@@ -75,6 +93,18 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// loadBasicAuth reads a username/password pair from the given env vars for
+// HTTP Basic Auth against a backend. Both must be set or both unset - a
+// lone username or password is almost certainly a misconfiguration.
+func loadBasicAuth(usernameVar, passwordVar string) (username, password string, err error) {
+	username = os.Getenv(usernameVar)
+	password = os.Getenv(passwordVar)
+	if (username == "") != (password == "") {
+		return "", "", fmt.Errorf("%s and %s must both be set, or both unset", usernameVar, passwordVar)
+	}
+	return username, password, nil
 }
 
 func parseBackendURL(raw string) (*url.URL, error) {

@@ -30,11 +30,24 @@ var hopByHopHeaders = []string{
 	"Upgrade",
 }
 
+// backendAuth holds optional HTTP Basic Auth credentials for a backend. A
+// zero value means no auth is sent.
+type backendAuth struct {
+	username string
+	password string
+}
+
+func (a backendAuth) configured() bool {
+	return a.username != "" || a.password != ""
+}
+
 // Handler proxies requests to one of two backends based on routing.Route.
 type Handler struct {
 	router         *router.Router
 	defaultBackend *url.URL
+	defaultAuth    backendAuth
 	ocrBackend     *url.URL
+	ocrAuth        backendAuth
 	maxBodyBytes   int64
 	defaultClient  *http.Client
 	ocrClient      *http.Client
@@ -43,12 +56,16 @@ type Handler struct {
 
 // Config bundles the dependencies a Handler needs.
 type Config struct {
-	Router            *router.Router
-	DefaultBackendURL *url.URL
-	OCRBackendURL     *url.URL
-	MaxBodyBytes      int64
-	RequestTimeout    time.Duration
-	Logger            *slog.Logger
+	Router                 *router.Router
+	DefaultBackendURL      *url.URL
+	DefaultBackendUsername string
+	DefaultBackendPassword string
+	OCRBackendURL          *url.URL
+	OCRBackendUsername     string
+	OCRBackendPassword     string
+	MaxBodyBytes           int64
+	RequestTimeout         time.Duration
+	Logger                 *slog.Logger
 }
 
 // New builds a Handler ready to serve requests.
@@ -66,7 +83,9 @@ func New(cfg Config) *Handler {
 	return &Handler{
 		router:         cfg.Router,
 		defaultBackend: cfg.DefaultBackendURL,
+		defaultAuth:    backendAuth{username: cfg.DefaultBackendUsername, password: cfg.DefaultBackendPassword},
 		ocrBackend:     cfg.OCRBackendURL,
+		ocrAuth:        backendAuth{username: cfg.OCRBackendUsername, password: cfg.OCRBackendPassword},
 		maxBodyBytes:   cfg.MaxBodyBytes,
 		defaultClient:  newClient(),
 		ocrClient:      newClient(),
@@ -92,10 +111,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	backendName := "default"
 	backendURL := h.defaultBackend
+	auth := h.defaultAuth
 	client := h.defaultClient
 	if decision.Backend == router.OCR {
 		backendName = "ocr"
 		backendURL = h.ocrBackend
+		auth = h.ocrAuth
 		client = h.ocrClient
 	}
 
@@ -104,7 +125,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		metrics.RouteFallbackTotal.WithLabelValues(string(decision.Reason)).Inc()
 	}
 
-	status, err := h.forward(r, w, client, backendURL, body)
+	status, err := h.forward(r, w, client, backendURL, auth, body)
 	duration := time.Since(start)
 	metrics.RequestDuration.WithLabelValues(backendName).Observe(duration.Seconds())
 
@@ -125,9 +146,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // forward sends body to backendURL+r.URL.Path(+query), streams the response
-// back to w, and returns the upstream status code. On failure it writes a
+// back to w, and returns the upstream status code. If auth is configured,
+// it sets the backend's Basic Auth credentials, overriding any
+// Authorization header the original client sent. On failure it writes a
 // 502 to w itself and returns the error.
-func (h *Handler) forward(r *http.Request, w http.ResponseWriter, client *http.Client, backendURL *url.URL, body []byte) (int, error) {
+func (h *Handler) forward(r *http.Request, w http.ResponseWriter, client *http.Client, backendURL *url.URL, auth backendAuth, body []byte) (int, error) {
 	target := *backendURL
 	target.Path = singleJoiningSlash(backendURL.Path, r.URL.Path)
 	target.RawQuery = r.URL.RawQuery
@@ -142,6 +165,9 @@ func (h *Handler) forward(r *http.Request, w http.ResponseWriter, client *http.C
 	}
 	copyHeaders(outReq.Header, r.Header)
 	outReq.Host = backendURL.Host
+	if auth.configured() {
+		outReq.SetBasicAuth(auth.username, auth.password)
+	}
 
 	resp, err := client.Do(outReq)
 	if err != nil {

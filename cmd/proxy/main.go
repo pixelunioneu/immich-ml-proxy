@@ -40,12 +40,16 @@ func run() error {
 
 	r := router.New(cfg.OCRTaskKeys)
 	handler := proxy.New(proxy.Config{
-		Router:            r,
-		DefaultBackendURL: cfg.DefaultBackendURL,
-		OCRBackendURL:     cfg.OCRBackendURL,
-		MaxBodyBytes:      cfg.MaxBodyBytes,
-		RequestTimeout:    cfg.RequestTimeout,
-		Logger:            logger,
+		Router:                 r,
+		DefaultBackendURL:      cfg.DefaultBackendURL,
+		DefaultBackendUsername: cfg.DefaultBackendUsername,
+		DefaultBackendPassword: cfg.DefaultBackendPassword,
+		OCRBackendURL:          cfg.OCRBackendURL,
+		OCRBackendUsername:     cfg.OCRBackendUsername,
+		OCRBackendPassword:     cfg.OCRBackendPassword,
+		MaxBodyBytes:           cfg.MaxBodyBytes,
+		RequestTimeout:         cfg.RequestTimeout,
+		Logger:                 logger,
 	})
 
 	mux := http.NewServeMux()
@@ -63,7 +67,9 @@ func run() error {
 	logger.Info("starting immich-ml-proxy",
 		slog.String("listen_addr", cfg.ListenAddr),
 		slog.String("default_backend", cfg.DefaultBackendURL.String()),
+		slog.Bool("default_backend_basic_auth", cfg.DefaultBackendUsername != ""),
 		slog.String("ocr_backend", cfg.OCRBackendURL.String()),
+		slog.Bool("ocr_backend_basic_auth", cfg.OCRBackendUsername != ""),
 	)
 
 	errCh := make(chan error, 1)

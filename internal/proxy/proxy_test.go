@@ -115,6 +115,68 @@ func TestServeHTTP_RoutesToDefaultBackend(t *testing.T) {
 	}
 }
 
+func TestServeHTTP_SendsBasicAuthToBackend(t *testing.T) {
+	var gotUser, gotPass string
+	var gotOK bool
+
+	defaultStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUser, gotPass, gotOK = r.BasicAuth()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer defaultStub.Close()
+
+	h := New(Config{
+		Router:                 router.New(map[string]struct{}{"ocr": {}}),
+		DefaultBackendURL:      mustURL(t, defaultStub.URL),
+		DefaultBackendUsername: "gpu-user",
+		DefaultBackendPassword: "gpu-pass",
+		OCRBackendURL:          mustURL(t, defaultStub.URL),
+		MaxBodyBytes:           1 << 20,
+		RequestTimeout:         5 * time.Second,
+		Logger:                 testLogger(),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/predict", strings.NewReader(`{"clip":{}}`))
+	req.Header.Set("Authorization", "Bearer client-supplied-token")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if !gotOK {
+		t.Fatal("backend did not receive Basic Auth credentials")
+	}
+	if gotUser != "gpu-user" || gotPass != "gpu-pass" {
+		t.Errorf("backend got user=%q pass=%q, want gpu-user/gpu-pass", gotUser, gotPass)
+	}
+}
+
+func TestServeHTTP_NoBasicAuthConfigured(t *testing.T) {
+	var gotAuthHeader string
+
+	defaultStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuthHeader = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer defaultStub.Close()
+
+	h := New(Config{
+		Router:            router.New(map[string]struct{}{"ocr": {}}),
+		DefaultBackendURL: mustURL(t, defaultStub.URL),
+		OCRBackendURL:     mustURL(t, defaultStub.URL),
+		MaxBodyBytes:      1 << 20,
+		RequestTimeout:    5 * time.Second,
+		Logger:            testLogger(),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/predict", strings.NewReader(`{"clip":{}}`))
+	req.Header.Set("Authorization", "Bearer client-supplied-token")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if gotAuthHeader != "Bearer client-supplied-token" {
+		t.Errorf("Authorization header = %q, want client's header to pass through unmodified", gotAuthHeader)
+	}
+}
+
 func TestServeHTTP_BackendDown(t *testing.T) {
 	// A server that's immediately closed simulates a connection failure.
 	deadStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
