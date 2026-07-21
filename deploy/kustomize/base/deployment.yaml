@@ -50,6 +50,10 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             runAsNonRoot: true
+            # distroless/static-debian12:nonroot's USER is the name
+            # "nonroot", not numeric, so kubelet can't verify
+            # runAsNonRoot from image metadata alone without this.
+            runAsUser: 65532
             capabilities:
               drop:
                 - ALL
