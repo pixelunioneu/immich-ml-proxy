@@ -1,8 +1,7 @@
 # CONTEXT
 
-Single-context domain doc for `immich-ml-proxy`. Decisions with a "why" live
-in `docs/adr/`; this file holds the shared vocabulary and the facts about the
-upstream system that the code relies on.
+Single-context domain doc for `immich-ml-proxy`. This file holds the shared
+vocabulary and the facts about the upstream system that the code relies on.
 
 ## What this is
 
@@ -33,7 +32,7 @@ endpoints.
   type, not an intersection, and every job caller (`smart-info.service.ts`,
   `person.service.ts`, `ocr.service.ts`) POSTs exactly one top-level key per
   call. This is the load-bearing assumption behind routing by top-level key
-  with no fan-out/merge — see ADR-0001. If a future Immich version starts
+  with no fan-out/merge. If a future Immich version starts
   bundling multiple tasks per request, this proxy's routing would silently
   pick one backend and drop the other task's work; watch
   `immich_ml_proxy_route_fallback_total` and the request logs for early

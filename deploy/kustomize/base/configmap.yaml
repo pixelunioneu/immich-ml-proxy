@@ -9,7 +9,7 @@ data:
   LISTEN_ADDR: ":3003"
   # Placeholders - set to the real GPU/CPU immich-ml Service URLs for this
   # environment via the dev/prd overlays before deploying.
-  DEFAULT_BACKEND_URL: "https://immich-ml-gpu.mgmt.tech.pixelunion.eu"
+  DEFAULT_BACKEND_URL: "https://immich-ml-gpu.example.internal"
   OCR_BACKEND_URL: "http://immich-ml.immich-ml.svc.cluster.local:3003"
   OCR_TASK_KEYS: "ocr"
   REQUEST_TIMEOUT: "60s"

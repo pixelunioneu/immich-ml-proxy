@@ -14,7 +14,7 @@ pipelines per replica. Once `clip` + `facial-recognition` + `ocr`'s ONNX
 Runtime CUDA arenas are all resident, there's ~100MB of headroom left, and
 OCR's recognition stage (which batches per detected text-line, with no
 fixed-size arena) throws CUDA OOM errors under concurrent load. Immich never
-sends more than one task type per request (see `docs/adr/0001-*.md`), so
+sends more than one task type per request, so
 routing by top-level JSON key lets OCR run on CPU — where its ~20MB of
 weights are trivial to host — without touching `clip`/`facial-recognition`'s
 GPU placement at all.
@@ -26,7 +26,7 @@ All configuration is via environment variables:
 | Var | Required | Default | Description |
 |---|---|---|---|
 | `LISTEN_ADDR` | no | `:3003` | address the proxy listens on |
-| `DEFAULT_BACKEND_URL` | yes | — | base URL of the GPU backend, e.g. `https://immich-ml-gpu.mgmt.tech.pixelunion.eu` |
+| `DEFAULT_BACKEND_URL` | yes | — | base URL of the GPU backend, e.g. `https://immich-ml-gpu.example.internal` |
 | `OCR_BACKEND_URL` | yes | — | base URL of the OCR/CPU backend, e.g. `http://immich-ml.immich-ml.svc.cluster.local:3003` |
 | `OCR_TASK_KEYS` | no | `ocr` | comma-separated top-level JSON keys routed to the OCR backend |
 | `REQUEST_TIMEOUT` | no | `60s` | per-request upstream timeout |
@@ -65,7 +65,7 @@ golangci-lint run
 ```
 
 ```sh
-DEFAULT_BACKEND_URL=https://immich-ml-gpu.mgmt.tech.pixelunion.eu \
+DEFAULT_BACKEND_URL=https://immich-ml-gpu.example.internal \
 OCR_BACKEND_URL=http://immich-ml.immich-ml.svc.cluster.local:3003 \
 go run ./cmd/proxy
 ```

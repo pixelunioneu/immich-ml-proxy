@@ -4,7 +4,7 @@
 //
 // Immich's server never mixes task types within a single /predict request —
 // MachineLearningRequest is a union type and every job caller (smart search,
-// face detection, OCR) sends exactly one top-level key. See docs/adr/0001.
+// face detection, OCR) sends exactly one top-level key.
 // If that assumption ever stops holding, a request could legitimately need
 // both backends; this router always picks one, so watch route_fallback_total
 // and the "ocr"+"clip" fallback log lines for early warning of a mix.
