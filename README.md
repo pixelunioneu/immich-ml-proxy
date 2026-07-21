@@ -66,6 +66,13 @@ backends actually get load-balanced across.
   - `immich_ml_proxy_upstream_errors_total{backend}`
   - `immich_ml_proxy_request_duration_seconds{backend}`
 
+  `deploy/kustomize/base/prometheusrule.yaml` has alerting rules for these,
+  and `deploy/grafana/dashboard.json` is a matching dashboard (traffic,
+  routing breakdown, latency percentiles, Go runtime) - see
+  `deploy/grafana/kustomization.yaml` for how to provision it via a
+  `grafana_dashboard`-labeled ConfigMap (kube-prometheus-stack's Grafana
+  sidecar convention).
+
 ## Routing behavior
 
 `/predict` requests are `multipart/form-data`, not raw JSON: immich-ml's
