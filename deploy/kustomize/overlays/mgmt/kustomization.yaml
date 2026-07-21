@@ -4,7 +4,7 @@ kind: Kustomization
 images:
   - name: immich-ml-proxy
     newName: ghcr.io/pixelunioneu/immich-ml-proxy
-    newTag: latest
+    newTag: v0.2.0
 
 resources:
   - ../../base

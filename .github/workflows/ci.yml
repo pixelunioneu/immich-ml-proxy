@@ -113,3 +113,22 @@ jobs:
             --title "v${{ steps.version.outputs.next }}" \
             --generate-notes \
             --notes "Image: \`ghcr.io/${{ github.repository }}:v${{ steps.version.outputs.next }}\`"
+
+      # Pins the overlay to the version just released, rather than relying on
+      # the mutable :latest tag. Pushed with the default GITHUB_TOKEN, which
+      # GitHub Actions deliberately excludes from triggering further
+      # workflow runs, so this can't loop back into another release.
+      - name: Bump overlay image tag
+        if: steps.version.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          sed -i "s/newTag: .*/newTag: v${{ steps.version.outputs.next }}/" deploy/kustomize/overlays/mgmt/kustomization.yaml
+          if git diff --quiet; then
+            echo "overlay already at v${{ steps.version.outputs.next }}, nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deploy/kustomize/overlays/mgmt/kustomization.yaml
+          git commit -m "Pin overlay image to v${{ steps.version.outputs.next }}"
+          git push origin HEAD:main

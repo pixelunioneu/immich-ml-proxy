@@ -19,8 +19,6 @@ spec:
         app.kubernetes.io/name: immich-ml-proxy
         app.kubernetes.io/component: proxy
     spec:
-      imagePullSecrets:
-        - name: gitlab-pullsecret
       containers:
         - name: proxy
           imagePullPolicy: Always
