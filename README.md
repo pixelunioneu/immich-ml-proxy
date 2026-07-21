@@ -46,6 +46,14 @@ mixed up, and a client can't smuggle its own credentials past the proxy.
 Both backend URLs may use `http://` or `https://` independently — the proxy
 doesn't care which scheme a given backend uses.
 
+The proxy dials a fresh connection per backend request rather than reusing
+keep-alive connections. This is deliberate: Kubernetes Services load-balance
+per TCP connection, not per request, so a pooled connection would keep
+riding whichever pod it first connected to for every request that reuses
+it - silently pinning all traffic to one pod regardless of replica count.
+Each request re-resolving and re-dialing is what makes multi-replica
+backends actually get load-balanced across.
+
 ## Endpoints
 
 - `POST /predict` (or any path) — proxied to the routed backend, unmodified.

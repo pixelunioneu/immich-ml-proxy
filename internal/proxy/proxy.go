@@ -6,6 +6,7 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"log/slog"
@@ -77,9 +78,18 @@ func New(cfg Config) *Handler {
 		return &http.Client{
 			Timeout: cfg.RequestTimeout,
 			Transport: &http.Transport{
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 100,
-				IdleConnTimeout:     90 * time.Second,
+				// Kubernetes Services load-balance per TCP connection, not
+				// per request - kube-proxy only picks a backend pod when a
+				// connection is dialed. A pooled keep-alive connection
+				// would keep riding that one pick for every request that
+				// reuses it, silently pinning all traffic to a single pod
+				// no matter how many replicas or DNS records the backend
+				// has. Disabling keep-alives makes every request dial
+				// fresh, so each one gets its own load-balancing decision.
+				DisableKeepAlives: true,
+				TLSClientConfig: &tls.Config{
+					ClientSessionCache: tls.NewLRUClientSessionCache(64),
+				},
 			},
 		}
 	}
