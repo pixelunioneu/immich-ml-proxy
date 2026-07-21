@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+images:
+  - name: immich-ml-proxy
+    newName: ghcr.io/pixelunioneu/immich-ml-proxy
+    newTag: latest
+
+resources:
+  - ../../base

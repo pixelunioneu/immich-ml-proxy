@@ -1,0 +1,78 @@
+stages:
+  - lint
+  - test
+  - build
+  - container
+  - scan
+
+variables:
+  GOFLAGS: "-mod=readonly"
+
+.go_cache: &go_cache
+  cache:
+    key: go-mod
+    paths:
+      - go/pkg/mod
+
+lint:
+  stage: lint
+  image: golangci/golangci-lint:v1.62-alpine
+  <<: *go_cache
+  script:
+    - golangci-lint run --timeout 5m
+
+test:
+  stage: test
+  image: golang:1.25-alpine
+  <<: *go_cache
+  before_script:
+    - go mod download
+  script:
+    - go test -race -cover ./...
+
+build:
+  stage: build
+  image: golang:1.25-alpine
+  <<: *go_cache
+  before_script:
+    - go mod download
+  script:
+    - CGO_ENABLED=0 go build ./...
+
+kaniko_build:
+  stage: container
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  variables:
+    IMAGE: $DOCKER_REGISTRY/immich-ml-proxy
+  script:
+    - mkdir -p /kaniko/.docker
+    - |
+      cat > /kaniko/.docker/config.json <<EOF
+      {"auths":{"${DOCKER_REGISTRY}":{"username":"${DOCKER_USERNAME}","password":"${DOCKER_PASSWORD}"}}}
+      EOF
+    - |
+      CMD="/kaniko/executor --context ${CI_PROJECT_DIR} --dockerfile ${CI_PROJECT_DIR}/Dockerfile --destination ${IMAGE}:${CI_COMMIT_SHA}"
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        CMD="$CMD --destination ${IMAGE}:${CI_COMMIT_TAG}"
+      elif [ "$CI_COMMIT_BRANCH" = "main" ] || [ "$CI_COMMIT_BRANCH" = "master" ]; then
+        CMD="$CMD --destination ${IMAGE}:latest"
+      fi
+      eval $CMD
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_TAG
+
+trivy_scan:
+  stage: scan
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  variables:
+    IMAGE: $DOCKER_REGISTRY/immich-ml-proxy
+  script:
+    - trivy image --exit-code 0 --severity HIGH,CRITICAL ${IMAGE}:${CI_COMMIT_SHA}
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_TAG

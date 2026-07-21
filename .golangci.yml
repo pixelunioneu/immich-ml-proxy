@@ -1,0 +1,18 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - gosec
+    - unused
+    - ineffassign
+    - bodyclose
+    - unconvert
+
+linters-settings:
+  gosec:
+    excludes:
+      - G114 # ReadHeaderTimeout is set explicitly on http.Server; this rule flags http.ListenAndServe use patterns we don't have
