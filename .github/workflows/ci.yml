@@ -98,7 +98,7 @@ jobs:
 
       - name: Scan image
         if: steps.version.outputs.skip == 'false'
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:v${{ steps.version.outputs.next }}
           severity: HIGH,CRITICAL
