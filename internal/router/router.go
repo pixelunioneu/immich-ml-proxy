@@ -1,6 +1,9 @@
 // Package router decides which backend an immich-machine-learning request
 // should be forwarded to, based on the top-level task key(s) present in the
-// request body.
+// body it's given. It has no HTTP or multipart awareness itself - the
+// caller (internal/proxy) is responsible for extracting the actual JSON to
+// inspect (immich-ml's /predict is multipart/form-data; the routable keys
+// live in its "entries" field, not the raw request body).
 //
 // Immich's server never mixes task types within a single /predict request —
 // MachineLearningRequest is a union type and every job caller (smart search,

@@ -1,7 +1,8 @@
 # immich-ml-proxy
 
 A small reverse proxy in front of `immich-machine-learning` that routes each
-`/predict` request to one of two backends based on its top-level task key:
+`/predict` request to one of two backends based on the task key(s) inside
+its `entries` field:
 
 - `ocr` → the OCR backend (intended to be a CPU-only `immich-ml` replica)
 - anything else (`clip`, `facial-recognition`, ...) → the default backend
@@ -59,12 +60,20 @@ doesn't care which scheme a given backend uses.
 
 ## Routing behavior
 
+`/predict` requests are `multipart/form-data`, not raw JSON: immich-ml's
+FastAPI endpoint takes an `entries` form field (a JSON string keyed by task,
+e.g. `{"ocr": {...}}`) alongside separate `image`/`text` parts. The proxy
+extracts just the `entries` part to make its routing decision, then forwards
+the entire original request unmodified - it never re-encodes or alters the
+multipart body.
+
 Routing fails open to the default (GPU) backend whenever the request can't
-be confidently classified — non-`/predict` paths, an empty body, or a body
-that doesn't decode as a JSON object. This means a request Immich would have
-sent successfully always gets forwarded somewhere; it's never rejected
-because the proxy couldn't parse it. Watch
-`immich_ml_proxy_route_fallback_total` for how often that's happening.
+be confidently classified — non-`/predict` paths, a body that isn't
+multipart, a missing `entries` part, or an `entries` value that doesn't
+decode as a JSON object. This means a request Immich would have sent
+successfully always gets forwarded somewhere; it's never rejected because
+the proxy couldn't parse it. Watch `immich_ml_proxy_route_fallback_total`
+for how often that's happening.
 
 ## Development
 

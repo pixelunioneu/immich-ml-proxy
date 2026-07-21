@@ -1,8 +1,10 @@
 package proxy
 
 import (
+	"bytes"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -24,6 +26,32 @@ func mustURL(t *testing.T, raw string) *url.URL {
 
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+// multipartPredictRequest builds a request shaped like the real
+// immich-machine-learning /predict call: multipart/form-data with an
+// "entries" field (task-keyed JSON) and an "image" file part.
+func multipartPredictRequest(t *testing.T, entries string) *http.Request {
+	t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	if err := w.WriteField("entries", entries); err != nil {
+		t.Fatalf("write entries field: %v", err)
+	}
+	fw, err := w.CreateFormFile("image", "photo.jpg")
+	if err != nil {
+		t.Fatalf("create image part: %v", err)
+	}
+	if _, err := fw.Write([]byte("fake-jpeg-bytes")); err != nil {
+		t.Fatalf("write image part: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/predict", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	return req
 }
 
 func TestServeHTTP_RoutesToOCRBackend(t *testing.T) {
@@ -72,6 +100,137 @@ func TestServeHTTP_RoutesToOCRBackend(t *testing.T) {
 	if body := rec.Body.String(); body != `{"ocr":"result"}` {
 		t.Errorf("response body = %q, want %q", body, `{"ocr":"result"}`)
 	}
+}
+
+// TestServeHTTP_MultipartRoutesToOCRBackend covers the actual
+// immich-machine-learning wire format: multipart/form-data with the
+// routable task key inside the "entries" field, not the raw body.
+func TestServeHTTP_MultipartRoutesToOCRBackend(t *testing.T) {
+	var hitOCR, hitDefault bool
+	var gotContentType string
+
+	ocrStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitOCR = true
+		gotContentType = r.Header.Get("Content-Type")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ocrStub.Close()
+
+	defaultStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitDefault = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer defaultStub.Close()
+
+	h := New(Config{
+		Router:            router.New(map[string]struct{}{"ocr": {}}),
+		DefaultBackendURL: mustURL(t, defaultStub.URL),
+		OCRBackendURL:     mustURL(t, ocrStub.URL),
+		MaxBodyBytes:      1 << 20,
+		RequestTimeout:    5 * time.Second,
+		Logger:            testLogger(),
+	})
+
+	req := multipartPredictRequest(t, `{"ocr":{"recognition":{"modelName":"PP-OCRv5_mobile"}}}`)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if !hitOCR || hitDefault {
+		t.Fatalf("expected multipart request to hit OCR backend only; hitOCR=%v hitDefault=%v", hitOCR, hitDefault)
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
+	}
+	if !strings.HasPrefix(gotContentType, "multipart/form-data") {
+		t.Errorf("backend Content-Type = %q, want multipart/form-data (body forwarded unmodified)", gotContentType)
+	}
+}
+
+func TestServeHTTP_MultipartRoutesToDefaultBackend(t *testing.T) {
+	var hitOCR, hitDefault bool
+
+	ocrStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitOCR = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ocrStub.Close()
+
+	defaultStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitDefault = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer defaultStub.Close()
+
+	h := New(Config{
+		Router:            router.New(map[string]struct{}{"ocr": {}}),
+		DefaultBackendURL: mustURL(t, defaultStub.URL),
+		OCRBackendURL:     mustURL(t, ocrStub.URL),
+		MaxBodyBytes:      1 << 20,
+		RequestTimeout:    5 * time.Second,
+		Logger:            testLogger(),
+	})
+
+	req := multipartPredictRequest(t, `{"clip":{"visual":{"modelName":"ViT-B-32"}}}`)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if hitOCR || !hitDefault {
+		t.Fatalf("expected multipart request to hit default backend only; hitOCR=%v hitDefault=%v", hitOCR, hitDefault)
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
+	}
+}
+
+func TestRoutingPayload(t *testing.T) {
+	t.Run("non-multipart body passes through unchanged", func(t *testing.T) {
+		body := []byte(`{"clip":{}}`)
+		got := routingPayload("application/json", body)
+		if string(got) != string(body) {
+			t.Errorf("got %q, want body passed through unchanged", got)
+		}
+	})
+
+	t.Run("multipart extracts the entries field", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		_ = w.WriteField("entries", `{"ocr":{}}`)
+		fw, _ := w.CreateFormFile("image", "photo.jpg")
+		_, _ = fw.Write([]byte("fake-jpeg"))
+		_ = w.Close()
+
+		got := routingPayload(w.FormDataContentType(), buf.Bytes())
+		if string(got) != `{"ocr":{}}` {
+			t.Errorf("got %q, want entries field content", got)
+		}
+	})
+
+	t.Run("multipart without an entries field returns nil", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		_ = w.WriteField("text", "a search query")
+		_ = w.Close()
+
+		got := routingPayload(w.FormDataContentType(), buf.Bytes())
+		if got != nil {
+			t.Errorf("got %q, want nil", got)
+		}
+	})
+
+	t.Run("malformed content type falls back to raw body", func(t *testing.T) {
+		body := []byte(`{"clip":{}}`)
+		got := routingPayload("not a content type;;;", body)
+		if string(got) != string(body) {
+			t.Errorf("got %q, want body passed through unchanged", got)
+		}
+	})
+
+	t.Run("multipart with no boundary returns nil", func(t *testing.T) {
+		got := routingPayload("multipart/form-data", []byte("whatever"))
+		if got != nil {
+			t.Errorf("got %q, want nil", got)
+		}
+	})
 }
 
 func TestServeHTTP_RoutesToDefaultBackend(t *testing.T) {

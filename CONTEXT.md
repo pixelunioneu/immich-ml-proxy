@@ -14,19 +14,27 @@ endpoints.
 ## Domain language
 
 - **Task** — one of `clip`, `facial-recognition`, `ocr`: the top-level JSON
-  key in a `/predict` request body, naming which immich-ml pipeline should
-  handle it.
+  key in a `/predict` request's `entries` field, naming which immich-ml
+  pipeline should handle it.
 - **Backend** — one of two upstream `immich-ml` deployments this proxy
   forwards to: the **default** backend (GPU, runs all pipelines) and the
   **OCR** backend (intended to be CPU-only, runs only what's routed to it).
 - **Routing decision** — the proxy's choice of backend for a request, made
-  by inspecting the request body's top-level key(s) against the configured
-  `OCR_TASK_KEYS` set. A decision is a **fallback** when it couldn't be
-  confidently derived (bad path, empty/malformed body) and defaulted to the
-  GPU backend instead.
+  by inspecting the `entries` field's top-level key(s) against the
+  configured `OCR_TASK_KEYS` set. A decision is a **fallback** when it
+  couldn't be confidently derived (bad path, non-multipart or malformed
+  body, missing `entries` part) and defaulted to the GPU backend instead.
 
 ## Upstream facts this proxy depends on
 
+- **`/predict` is `multipart/form-data`, not raw JSON** (verified in
+  `immich/machine-learning/immich_ml/main.py`, 2026-07-21): the FastAPI
+  handler takes `entries: str = Form()` (task-keyed JSON), plus separate
+  `image: bytes | None = File()` and `text: str | None = Form()` parts. The
+  routable task keys live inside the `entries` field's JSON value, not the
+  request body as a whole - treating the whole body as JSON always fails to
+  decode and silently fell back to the default backend for 100% of
+  requests in production before this was caught.
 - **Immich never mixes task types in one request** (verified in
   `immich`'s server source, 2026-07-21): `MachineLearningRequest` is a union
   type, not an intersection, and every job caller (`smart-info.service.ts`,

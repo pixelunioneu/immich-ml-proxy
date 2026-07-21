@@ -9,8 +9,11 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/pixelunioneu/immich-ml-proxy/internal/metrics"
@@ -107,7 +110,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decision := h.router.Route(r.URL.Path, body)
+	decision := h.router.Route(r.URL.Path, routingPayload(r.Header.Get("Content-Type"), body))
 
 	backendName := "default"
 	backendURL := h.defaultBackend
@@ -143,6 +146,39 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	logAttrs = append(logAttrs, slog.Int("status", status))
 	h.logger.Info("proxied request", logAttrs...)
+}
+
+// routingPayload extracts the bytes the router should inspect to make a
+// routing decision. immich-machine-learning's /predict takes
+// multipart/form-data (an "entries" field holding the task-keyed JSON,
+// plus separate image/text parts) rather than a raw JSON body, so the
+// whole request body is never valid JSON on its own. For a multipart
+// request, this pulls out just the "entries" part; anything else
+// (missing part, bad boundary, non-multipart body) returns nil, which
+// router.Route reports as an empty-body fallback.
+func routingPayload(contentType string, body []byte) []byte {
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil || !strings.HasPrefix(mediaType, "multipart/") {
+		return body
+	}
+	boundary, ok := params["boundary"]
+	if !ok {
+		return nil
+	}
+	mr := multipart.NewReader(bytes.NewReader(body), boundary)
+	for {
+		part, err := mr.NextPart()
+		if err != nil {
+			return nil
+		}
+		if part.FormName() == "entries" {
+			data, err := io.ReadAll(part)
+			if err != nil {
+				return nil
+			}
+			return data
+		}
+	}
 }
 
 // forward sends body to backendURL+r.URL.Path(+query), streams the response
